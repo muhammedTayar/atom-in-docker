@@ -1,0 +1,5 @@
+DOCKERFILE_NAME=Dockerfile_atom_gradle
+IMAGE_TAG=atom_gradle
+CONTAINER_NAME=atom_gradle
+
+${ATOM_DOCKER_PATH}/atom-wrapper $DOCKERFILE_NAME $IMAGE_TAG $CONTAINER_NAME ${1} "${@:2}"

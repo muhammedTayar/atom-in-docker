@@ -1,0 +1,65 @@
+DEBUG=0
+
+DOCKERFILE_NAME=$1
+IMAGE_TAG=$2
+CONTAINER_NAME=$3
+COMMAND=$4
+OTHER_ARGS=${@:5}
+
+if [ $DEBUG ]; then
+  echo -e "(debug option set)
+    DOCKERFILE_NAME    $DOCKERFILE_NAME
+    IMAGE_TAG          $IMAGE_TAG
+    CONTAINER_NAME     $CONTAINER_NAME
+    COMMAND            $COMMAND
+    OTHER_ARGS         $OTHER_ARGS
+  "
+fi
+
+[[ -z "$ATOM_DOCKER_PATH" ]] && echo "\$ATOM_DOCKER_PATH not set"
+[[ -z "$ATOM_DOCKER_UID" ]] && echo "\$ATOM_DOCKER_UID not set"
+[[ ( -z "$ATOM_DOCKER_PATH" ) || ( -z "$ATOM_DOCKER_UID" ) ]] && exit 1
+
+if [[ $4 == "build" ]]; then
+  docker build $OTHER_ARGS --build-arg ATOM_DOCKER_UID  -t $IMAGE_TAG -f "${ATOM_DOCKER_PATH}/docker/$DOCKERFILE_NAME" ~/bin/docker/
+elif [[ $4 == "exec" ]]; then
+  docker exec $CONTAINER_NAME $OTHER_ARGS
+elif [[ $4 == "start" ]]; then
+  # echo "${ATOM_DOCKER_PATH}/.atom/$CONTAINER_NAME:/home/atom/.atom"
+  docker run \
+    -dit \
+    -w /opt/app/ \
+    -v $PWD:/opt/app \
+    -v /tmp/.X11-unix/:/tmp/.X11-unix/ \
+    -v /dev/shm:/dev/shm \
+    -v "$HOME/.Xauthority:/home/atom/.Xauthority" \
+    -v "${ATOM_DOCKER_PATH}/.atom/$CONTAINER_NAME:/home/atom/.atom" \
+    -e DISPLAY \
+    -e ATOM_DOCKER_UID \
+    --rm \
+    --name $CONTAINER_NAME \
+    --network host \
+    $OTHER_ARGS \
+    $IMAGE_TAG
+elif [[ $4 == "setup" ]]; then
+  [ -d ${ATOM_DOCKER_PATH}/.atom/$CONTAINER_NAME ] || sudo mkdir ${ATOM_DOCKER_PATH}/.atom/$CONTAINER_NAME
+  sudo --preserve-env setfacl -R -m user:1234:rwx $PWD
+  sudo --preserve-env setfacl -R -m user:1234:rwx ${ATOM_DOCKER_PATH}/.atom/$CONTAINER_NAME
+elif [[ $4 == "clean" ]]; then
+  setfacl -R -m user:1234:0 $PWD
+  setfacl -R -m user:1234:0 ${ATOM_DOCKER_PATH}/.atom/$IMAGE_TAG
+elif [[ $4 == "bash" ]]; then
+  docker exec -it $CONTAINER_NAME bash
+elif [[ $4 == "enable" ]]; then
+  sudo setfacl -m user:$ATOM_DOCKER_UID:r ~/.Xauthority
+  find ~/bin -maxdepth 1 -type f -regex ".*\/[A-Za-z\-]*$" -exec chmod +x {} \;
+else
+  echo -e "Unknown operation '$COMMAND'. Try one of the following:
+        build   build image
+        setup   Create required folders including permissions
+        clean   Remove permissions for Docker user. Does not remove any files
+        start   start atom and container | sudo required if file permissions have not been set yet
+        exec    run bash cmd in running container
+        bash    Opens bash terminal in container
+        clean   removes Docker user's access permissions (uid $ATOM_DOCKER_UID in \$ATOM_DOCKER_UID) | sudo required"
+fi
